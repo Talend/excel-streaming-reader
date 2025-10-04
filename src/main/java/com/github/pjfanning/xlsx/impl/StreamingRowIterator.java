@@ -8,6 +8,8 @@ import com.github.pjfanning.xlsx.exceptions.CloseException;
 import com.github.pjfanning.xlsx.exceptions.NotSupportedException;
 import com.github.pjfanning.xlsx.exceptions.ParseException;
 import com.github.pjfanning.xlsx.impl.ooxml.HyperlinkData;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ooxml.POIXMLException;
 import org.apache.poi.ss.SpreadsheetVersion;
 import org.apache.poi.ss.formula.FormulaParser;
@@ -82,6 +84,19 @@ class StreamingRowIterator implements CloseableIterator<Row> {
   private boolean insideFormulaElement;
   private boolean insideIS;
 
+  //the fields below is added by TPD, we keep it
+
+  // sheet dimension
+  // <dimension ref="A1:B60"/>
+  private String dimension = "";
+
+  private int colNumber = 0;
+
+  // we need to track empty rows
+  private int firstRowIndex = -1;
+
+  private boolean parsingCols = false;
+
   StreamingRowIterator(final StreamingSheetReader streamingSheetReader,
                        final SharedStrings sst, final StylesTable stylesTable,
                        final XMLEventReader parser, final boolean use1904Dates, final int rowCacheSize,
@@ -131,6 +146,19 @@ class StreamingRowIterator implements CloseableIterator<Row> {
     }
   }
 
+  public int getColNumber() {
+    // the last col element is the aggregation of end of columns so it's not a real one
+    return colNumber - 1;
+  }
+
+  public int getFirstRowIndex() {
+    return firstRowIndex;
+  }
+
+  public String getDimension() {
+    return dimension;
+  }
+
   private void handleEvent(XMLEvent event) {
     if (event.getEventType() == XMLStreamConstants.CHARACTERS) {
       if (insideCharElement) {
@@ -148,6 +176,9 @@ class StreamingRowIterator implements CloseableIterator<Row> {
         Attribute rowNumAttr = startElement.getAttributeByName(QNAME_R);
         int rowIndex = currentRowNum;
         if (rowNumAttr != null) {
+          if (firstRowIndex == -1) {
+            firstRowIndex = Integer.parseInt(rowNumAttr.getValue());
+          }
           rowIndex = parseInt(rowNumAttr.getValue()) - 1;
           currentRowNum = rowIndex;
         }
@@ -178,7 +209,9 @@ class StreamingRowIterator implements CloseableIterator<Row> {
           }
         }
         currentColNum = firstColNum;
-      } else if ("col".equals(tagLocalName)) {
+      } else if ("cols".equals(tagLocalName)) {
+        parsingCols = true;
+      }  else if ("col".equals(tagLocalName)) {
         Attribute isHiddenAttr = startElement.getAttributeByName(QNAME_HIDDEN);
         Attribute widthAttr = startElement.getAttributeByName(QNAME_WIDTH);
         float width = -1;
@@ -199,6 +232,10 @@ class StreamingRowIterator implements CloseableIterator<Row> {
             if (isHidden) hiddenColumns.add(columnIndex);
             if (width >= 0) columnWidths.put(columnIndex, width);
           }
+        }
+
+        if(parsingCols) {
+          colNumber++;
         }
       } else if ("c".equals(tagLocalName)) {
         Attribute ref = startElement.getAttributeByName(QNAME_R);
@@ -275,6 +312,13 @@ class StreamingRowIterator implements CloseableIterator<Row> {
               break;
             }
           }
+        }
+        // we store the dimension as well to revert with this method when cols not found
+        // can happen see xlsx attached here https://jira.talendforge.org/browse/TDP-1957
+        // <dimension ref="A1:B60"/>
+        //this code is added by TDP team, maybe not necessary now, need a careful check, now only keep it TODO
+        if (refAttr != null){
+          this.dimension = refAttr.getValue();
         }
       } else if ("f".equals(tagLocalName)) {
         insideFormulaElement = true;
@@ -387,6 +431,8 @@ class StreamingRowIterator implements CloseableIterator<Row> {
             }
           }
         }
+      } else if ("cols".equals(tagLocalName)) {
+        parsingCols = false;
       }
     }
   }
@@ -656,5 +702,25 @@ class StreamingRowIterator implements CloseableIterator<Row> {
   @Override
   public void remove() {
     throw new NotSupportedException();
+  }
+
+  class CustomDataFormatter extends DataFormatter {
+
+    @Override
+    public String formatRawCellContents(double value, int formatIndex, String formatString, boolean use1904Windowing) {
+      //i don't why TDP do it, but if the comment is true below, it will break one junit : StreamingReaderTest.testSpecialStyles,
+      //as the source excel format is sure "YY", but here force to YYYY
+
+      // TDP-1656 (olamy) for some reasons poi use date format with only 2 digits for years
+      // even the excel data ws using 4 so force the pattern here
+      if ( DateUtil.isValidExcelDate( value) && StringUtils.countMatches( formatString, "y") == 2) {
+        formatString = StringUtils.replace(formatString, "yy", "yyyy");
+      }
+      if (DateUtil.isValidExcelDate(value) && StringUtils.countMatches(formatString, "Y") == 2) {
+        formatString = StringUtils.replace(formatString, "YY", "YYYY");
+      }
+      return super.formatRawCellContents(value, formatIndex, formatString, use1904Windowing);
+
+    }
   }
 }

@@ -114,7 +114,7 @@ public class StreamingWorkbookReader implements Iterable<Sheet>, Date1904Support
         }
         throw new ReadException("Unsupported File Format (only xlsx files are supported)", e);
       } catch(IOException | RuntimeException e) {
-        if (f != null && !f.delete()) {
+        if (f != null && !FilesHelper.deleteQuietly(f)) {
           log.debug("failed to delete temp file");
         }
         throw new ReadException("Unable to read input stream", e);

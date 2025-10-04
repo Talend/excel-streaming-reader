@@ -68,6 +68,10 @@ public class StreamingSheetReader implements Iterable<Row> {
   private CellAddress activeCell;
   private PaneInformation pane;
 
+  private String dimension = "";
+
+  private int colNumber = 0;
+
   StreamingSheetReader(final StreamingWorkbookReader streamingWorkbookReader,
                        final PackagePart packagePart,
                        final SharedStrings sst, final StylesTable stylesTable, final Comments commentsTable,
@@ -79,6 +83,15 @@ public class StreamingSheetReader implements Iterable<Row> {
     this.commentsTable = commentsTable;
     this.use1904Dates = use1904Dates;
     this.rowCacheSize = rowCacheSize;
+  }
+
+  public int getColNumber() {
+    // the last col element is the aggregation of end of columns so it's not a real one
+    return colNumber - 1;
+  }
+
+  public String getDimension() {
+    return dimension;
   }
 
   void setSheet(StreamingSheet sheet) {
@@ -270,6 +283,12 @@ public class StreamingSheetReader implements Iterable<Row> {
       StreamingRowIterator iterator = new StreamingRowIterator(this,
               sst, stylesTable, parser, use1904Dates, rowCacheSize, hiddenColumns, columnWidths, mergedCells, hyperlinks,
               sharedFormulaMap, defaultRowHeight, sheet);
+      if (colNumber < iterator.getColNumber()) {
+        colNumber = iterator.getColNumber();
+      }
+      if(iterator.getDimension() != null) {
+        dimension = iterator.getDimension();
+      }
       iterators.add(iterator);
       return iterator;
     } catch (IOException e) {
