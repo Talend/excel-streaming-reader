@@ -1,7 +1,7 @@
 package com.github.pjfanning.xlsx;
 
 import com.github.pjfanning.xlsx.exceptions.ParseException;
-import com.sun.org.apache.xpath.internal.jaxp.XPathFactoryImpl;
+import net.sf.saxon.xpath.XPathFactoryImpl;
 
 import org.apache.poi.ooxml.util.DocumentHelper;
 import org.w3c.dom.Document;
