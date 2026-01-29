@@ -1,6 +1,7 @@
 package com.github.pjfanning.xlsx;
 
 import com.github.pjfanning.xlsx.exceptions.ParseException;
+import net.sf.saxon.xpath.XPathFactoryImpl;
 import org.apache.poi.ooxml.util.DocumentHelper;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
@@ -31,7 +32,7 @@ public class XmlUtils {
 
   public static NodeList searchForNodeList(Document document, String xpath) throws ParseException {
     try {
-      XPath xp = XPathFactory.newInstance().newXPath();
+      XPath xp = new XPathFactoryImpl().newXPath();
       xp.setNamespaceContext(transitionalFormatNamespaceContext);
       NodeList nl = (NodeList)xp.compile(xpath).evaluate(document, XPathConstants.NODESET);
       if (nl.getLength() == 0) {
